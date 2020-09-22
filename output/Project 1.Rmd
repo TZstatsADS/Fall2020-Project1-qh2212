@@ -1,0 +1,185 @@
+---
+title: "Demographic Study on the ANES Cumulative Time Series Data"
+author: "Qinzhe Hu"
+date: "Sep 19, 2020"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+# 1. Introduction
+The [*American National Election Studies* (ANES)](https://electionstudies.org/) provides collections of data about the behavior of voters and surveys about the potential preferences that will influence the decision of voters. ANES has collected the repondence before and after the elections since 1948. These high quality data serves the research needs of different scholars and policy makers.
+
+The *Time Series Cumulative Data* of ANES contains about 1000 thousand variables also known as the questions asked in several ANES' times series studies. In this project, we shall pick up several varibales from this data to see the demographic rules of voters.
+
+
+#2. Variables Selection
+In order to get a more comprehensive view on the demographic analysis, we will choose the catagories which have top amount of occupancies among these years. i.e. VCF0102(age group),VCF0118(work status),VCF0106(race),VCF0104(gender)
+```{r,message=FALSE,error=FALSE,warning=FALSE,echo=FALSE}
+library(tidyverse)
+library(haven)
+library(devtools)
+library(RColorBrewer)
+library(data.table)
+library(ggplot2)
+library(scales)
+library(forcats)
+library(dplyr)
+library(ggrepel)
+data<-read_sav("C:/Users/wuyam/Desktop/anes_timeseries_cdf.sav")
+head(data)
+```
+
+
+So the manipulated data looks like this
+```{r,echo=FALSE}
+Election_years=as.character(seq(1948, 2016, 4))
+anes_use=data%>%
+  mutate(
+    year=as_factor(VCF0004),
+    age_group=as_factor(VCF0102),
+    work_status=as_factor(VCF0118),
+    race=as_factor(VCF0106),
+    gender=as_factor(VCF0104)
+  )%>%
+  filter(year %in% Election_years)
+data.table(anes_use%>%
+             select(year, age_group, work_status, race, gender)%>%
+             filter(!is.na(work_status)))
+anes_use = anes_use%>%select(year, age_group,work_status,race,gender)
+save(anes_use, file="C:/Users/wuyam/Desktop/data_use.RData")
+```
+#3. Glance on Demographic Features
+In this section, we assume that the demographic variables are stationary and consistent during the election years from 1948 and 2016. Therefore we would like to see those varaibles' cumulative proportions to give us brief but not precise conclusions.
+```{r,echo=FALSE}
+# age group
+cum_age<-anes_use%>%select(age_group)%>%table()%>%as.data.frame()%>%filter(Freq>0)%>%
+  mutate(prop=round(Freq/sum(Freq),digits = 2))
+names(cum_age)[names(cum_age)=="."]<-"group"
+cum_age<-cum_age%>%arrange(-prop)%>%mutate(prop_cumsum=cumsum(prop))
+ggplot(cum_age,aes(x=1,y=prop,fill=group))+
+  geom_col()+
+  geom_text(aes(label=prop),position = position_stack(vjust = 0.5))+
+  coord_polar("y",start=0)+
+  scale_fill_brewer(palette="Blues")+
+  labs(title = "Age Group Distribution")+
+  theme_void()
+ 
+
+# work status
+
+cum_work<-anes_use%>%select(work_status)%>%table()%>%as.data.frame()%>%filter(Freq>0)%>%
+  mutate(prop=round(Freq/sum(Freq),digits = 2))
+names(cum_work)[names(cum_work)=="."]<-"group"
+cum_work<-cum_work%>%arrange(-prop)%>%mutate(prop_cumsum=cumsum(prop))
+
+ggplot(cum_work,aes(x=1,y=prop,fill=group))+
+  geom_col()+
+  geom_text(aes(label=prop),position = position_stack(vjust = 0.5))+
+  coord_polar("y",start=0)+
+  scale_fill_brewer(palette="Blues")+
+  labs(title = "Work Status Distribution")+
+  theme_void()
+
+
+# gender
+cum_gender<-anes_use%>%select(gender)%>%table()%>%as.data.frame()%>%filter(Freq>0)%>%
+  mutate(prop=round(Freq/sum(Freq),digits = 2))
+names(cum_gender)[names(cum_gender)=="."]<-"group"
+cum_gender<-cum_gender%>%arrange(-prop)%>%mutate(prop_cumsum=cumsum(prop))
+
+ggplot(cum_gender,aes(x=1,y=prop,fill=group))+
+  geom_col()+
+  geom_text(aes(label=prop),position = position_stack(vjust = 0.5))+
+  coord_polar("y",start=0)+
+  scale_fill_brewer(palette="Blues")+
+  labs(title = "Gender Distribution")+
+  theme_void()
+
+# race
+cum_race<-anes_use%>%select(race)%>%table()%>%as.data.frame()%>%filter(Freq>0)%>%
+  mutate(prop=round(Freq/sum(Freq),digits = 2))
+names(cum_race)[names(cum_race)=="."]<-"group"
+cum_race<-cum_race%>%arrange(-prop)%>%mutate(prop_cumsum=cumsum(prop))
+
+ggplot(cum_race,aes(x=1,y=prop,fill=group))+
+  geom_col()+
+  geom_text(aes(label=prop),position = position_stack(vjust = 0.5))+
+  coord_polar("y",start=0)+
+  scale_fill_brewer(palette="Blues")+
+  labs(title = "Race Distribution")+
+  theme_void()
+```
+
+From the pie charts, we can easily construct a protrait for majority respondents who took the election survey. This is a *white non-hispanic, worked, mid aged female or male*.
+**However**, this conclusion is definitely not satifying, because pie charts cannot show the change of participants' features, especially we can see the gender distribution shows a 0% of other gender, which is actually not zero and might be significantly greater than zero after 2016. Most voters' demographic features are definitely not constance. Also we would like to learn how those features connet with each other.
+
+#4. Time Series for Demographic Portraits
+In this section, we will repeat our work in section 3 in the span of time.
+```{r,echo=FALSE}
+age_ts<-anes_use%>%filter(!is.na(age_group))%>%select(year,age_group)%>%group_by(year,age_group)%>%count()
+ggplot(age_ts,aes(x=year,y=n,fill=age_group))+
+  geom_bar(stat = "identity")+
+  scale_fill_brewer(palette="Blues")+
+  labs(title = "Age Group Time Series")+
+  theme_bw()
+  
+```
+This bar chart has a consistent conclusion as we mentioned in section 3, citizens whose age between 25-54 are the main repondents for election survey. Moreover, in 2012 and 2016, we notice the number of repondents whose age greater than 54 has significant increased compared with any other election years. We know that Obama continued his president career in 2012 and Trump started his president career in 2016. Both of them had special meanings for the history of American Presidents. This might be the part of reason why there are so many respondents took the survey in these two years.  
+
+```{r,echo=F}
+work_ts<-anes_use%>%filter(!is.na(work_status))%>%select(year,work_status)%>%group_by(year,work_status)%>%count()
+ggplot(work_ts,aes(x=year,y=n,fill=work_status))+
+  geom_bar(stat = "identity")+
+  scale_fill_brewer(palette="Blues")+
+  labs(title = "Work Status Time Series")+
+  theme_bw()
+```
+
+The employed percentage in each year among the respondents is very steadily floating around 60%. In order to get a close look on the unemployeed percentage among the respondents. We will need to see the percentage change instead of absolute value change.  
+```{r,echo=FALSE}
+new_work_ts<-work_ts%>%group_by(year)%>%mutate(per=n/sum(n))%>%filter(work_status == "1. Employed"|work_status =="2. Not employed: laid off, unemployed, on strike,")
+ggplot(new_work_ts,aes(x=year,y=per,group=work_status))+
+  geom_line(aes(linetype=work_status))+
+  geom_point()+
+  labs(title = "Employed VS. Unemployed Rate")+
+  theme_bw()
+```
+
+We can see an increasing trend on unemployed rate of repondents, also the employed rate has very sharp fluctuation after 2000 yr. Therefore, we cannot use average level to assume the future employed rate, furthermore, we cannot predict future employed rate by doing simple linear regression.    
+
+```{r,echo=FALSE}
+gender_ts<-anes_use%>%filter(!is.na(gender))%>%select(year,gender)%>%
+  group_by(year,gender)%>%count()
+ggplot(gender_ts,aes(x=year,y=n,fill=gender))+
+  geom_bar(stat = "identity")+
+  scale_fill_brewer(palette="Blues")+
+  labs(title = "Gender Time Series")+
+  theme_bw()
+```
+This is a very interesing phenomenon. In United States, there are 100 senators in total, only 25 of them are women. However, more than half of respondents are women. There might be two reasons for this, one is women are more interested in policy than men, another reason is women has never been treated equally as men has, and they would have more motivations to fight for equal rights. There are lots of research studying on this gender gap in voters.
+
+```{r,echo=FALSE}
+race_ts<-anes_use%>%filter(!is.na(race))%>%select(year,race)%>%
+  group_by(year,race)%>%count()
+ggplot(race_ts,aes(x=year,y=n,fill=race))+
+  geom_bar(stat = "identity")+
+  scale_fill_brewer(palette="Blues")+
+  labs(title = "Race Time Series")+
+  theme_bw()
+
+new_race_ts<-race_ts%>%group_by(year)%>%mutate(per=n/sum(n))
+ggplot(new_race_ts,aes(x=year,y=per,group=race))+
+  geom_line(aes(linetype=race))+
+  geom_point()+
+  labs(title = "Race Rate Time Series")+
+  theme_bw()
+```
+
+
+From the bar plot, we can see a significant increase after 2008 among all races compared with election years between 2008. However, the proportion of non-white voters decrease greatly in 2016. If we only consider the years before 2008, we will notice that American minorities are more and more interested in the election, this might because of the policy that this country was willing to accept non-white immigrants or the minority no longer be prevented from the voting. 
+In 2016, the decrease of rate implies that white citizens seems to care about the eletion than before. Those sharp change of rate between 2008 and 2016 shows that the race of presidents candidates significanlty influence the voters' willing to participate the voting.
+Also another interesting thing is comparing with 2012, the amount voters decrease significantly, the loss of amount is mainly caused by the decrease amount of minorities. Apparently, minorities believe they can do nothing under that situation, and Trump will get overwhelming support from white voters.
+
+
