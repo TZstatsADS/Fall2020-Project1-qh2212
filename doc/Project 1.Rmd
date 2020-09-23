@@ -53,6 +53,7 @@ save(anes_use, file="C:/Users/wuyam/Desktop/data_use.RData")
 #3. Glance on Demographic Features
 In this section, we assume that the demographic variables are stationary and consistent during the election years from 1948 and 2016. Therefore we would like to see those varaibles' cumulative proportions to give us brief but not precise conclusions.
 ```{r,echo=FALSE}
+load(file="C:/Users/wuyam/Desktop/data_use.RData")
 # age group
 cum_age<-anes_use%>%select(age_group)%>%table()%>%as.data.frame()%>%filter(Freq>0)%>%
   mutate(prop=round(Freq/sum(Freq),digits = 2))
